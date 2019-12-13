@@ -1,4 +1,4 @@
-package sluis
+package shluz
 
 import (
 	"fmt"
