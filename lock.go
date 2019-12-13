@@ -1,4 +1,4 @@
-package lock
+package sluis
 
 import (
 	"fmt"
@@ -15,9 +15,9 @@ var (
 	DefaultTimeout = 24 * time.Hour
 )
 
-func Init(serviceDir string) error {
+func Init(locksDir string) error {
 	Locks = make(map[string]LockObject)
-	LocksDir = filepath.Join(serviceDir, "locks")
+	LocksDir = locksDir
 
 	err := os.MkdirAll(LocksDir, 0755)
 	if err != nil {
