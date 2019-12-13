@@ -1,2 +1,2 @@
-# sluis
-Sluis is a locking library for go
+# Shluz
+Shluz is a locking library for go
