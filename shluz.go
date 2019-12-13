@@ -3,7 +3,6 @@ package sluis
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/flant/logboek"
