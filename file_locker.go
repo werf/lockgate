@@ -18,7 +18,6 @@ func (locker *fileLocker) tryLock() (bool, error) {
 	if locker.lockHandler == nil {
 		panic("lockHandler is not set")
 	}
-
 	if locker.ReadOnly {
 		return locker.lockHandler.TryRLock()
 	}
@@ -56,9 +55,11 @@ func (locker *fileLocker) pollLock() error {
 				locked, err := locker.tryLock()
 				if err != nil {
 					flockRes <- fmt.Errorf("error trying to lock file %q while polling for lock: %s", locker.FileLock.LockFilePath(), err)
+					break PollFlock
 				}
 				if locked {
 					flockRes <- nil
+					break PollFlock
 				}
 			case <-cancelPoll:
 				break PollFlock
