@@ -1,10 +1,12 @@
 package shluz
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/flant/werf/pkg/util"
+	"github.com/spaolacci/murmur3"
 )
 
 func NewFileLock(name string, locksDir string) LockObject {
@@ -62,6 +64,13 @@ func (lock *FileLock) WithLock(timeout time.Duration, readOnly bool, onWait func
 }
 
 func (lock *FileLock) LockFilePath() string {
-	fileName := util.MurmurHash(lock.GetName())
+	fileName := MurmurHash(lock.GetName())
 	return filepath.Join(lock.LocksDir, fileName)
+}
+
+func MurmurHash(args ...string) string {
+	h32 := murmur3.New32()
+	h32.Write([]byte(strings.Join(args, ":::")))
+	sum := h32.Sum32()
+	return fmt.Sprintf("%x", sum)
 }
