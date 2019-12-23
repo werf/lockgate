@@ -5,6 +5,7 @@ import (
 )
 
 type locker interface {
+	TryLock() (bool, error)
 	Lock() error
 	Unlock() error
 }
@@ -13,6 +14,10 @@ type baseLocker struct {
 	Timeout  time.Duration
 	ReadOnly bool
 	OnWait   func(doWait func() error) error
+}
+
+func (locker *baseLocker) TryLock() (bool, error) {
+	panic("not implemented")
 }
 
 func (locker *baseLocker) Lock() error {
@@ -30,6 +35,22 @@ type BaseLock struct {
 
 func (lock *BaseLock) GetName() string {
 	return lock.Name
+}
+
+func (lock *BaseLock) TryLock(l locker) (bool, error) {
+	if lock.ActiveLocks == 0 {
+		locked, err := l.TryLock()
+		if err != nil {
+			return false, err
+		}
+		if locked {
+			lock.ActiveLocks += 1
+		}
+		return locked, nil
+	} else {
+		lock.ActiveLocks += 1
+		return true, nil
+	}
 }
 
 func (lock *BaseLock) Lock(l locker) error {

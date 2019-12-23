@@ -45,20 +45,8 @@ type TryLockOptions struct {
 }
 
 func TryLock(name string, opts TryLockOptions) (bool, error) {
-	res := true
 	lock := getLock(name)
-
-	err := lock.Lock(0, opts.ReadOnly, func(doWait func() error) error {
-		// Wait called => is locked now, do not call doWait, just return
-		res = false
-		return nil
-	})
-
-	if err != nil {
-		return false, err
-	}
-
-	return res, nil
+	return lock.TryLock(opts.ReadOnly)
 }
 
 func Unlock(name string) error {
@@ -107,6 +95,7 @@ func getLock(name string) LockObject {
 
 type LockObject interface {
 	GetName() string
+	TryLock(readOnly bool) (bool, error)
 	Lock(timeout time.Duration, readOnly bool, onWait func(doWait func() error) error) error
 	Unlock() error
 	WithLock(timeout time.Duration, readOnly bool, onWait func(doWait func() error) error, f func() error) error

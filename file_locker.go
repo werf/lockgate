@@ -24,6 +24,17 @@ func (locker *fileLocker) tryLock() (bool, error) {
 	return locker.lockHandler.TryLock()
 }
 
+func (locker *fileLocker) TryLock() (bool, error) {
+	locker.lockHandler = flock.New(locker.FileLock.LockFilePath())
+
+	locked, err := locker.tryLock()
+	if err != nil {
+		return false, fmt.Errorf("error trying to lock file %s: %s", locker.FileLock.LockFilePath(), err)
+	}
+
+	return locked, nil
+}
+
 func (locker *fileLocker) Lock() error {
 	locker.lockHandler = flock.New(locker.FileLock.LockFilePath())
 
