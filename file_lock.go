@@ -30,6 +30,11 @@ func (lock *FileLock) newLocker(timeout time.Duration, readOnly bool, onWait fun
 	}
 }
 
+func (lock *FileLock) TryLock(readOnly bool) (bool, error) {
+	lock.locker = lock.newLocker(0, readOnly, nil)
+	return lock.BaseLock.TryLock(lock.locker)
+}
+
 func (lock *FileLock) Lock(timeout time.Duration, readOnly bool, onWait func(doWait func() error) error) error {
 	lock.locker = lock.newLocker(timeout, readOnly, onWait)
 	return lock.BaseLock.Lock(lock.locker)
