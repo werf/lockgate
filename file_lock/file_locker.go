@@ -44,9 +44,13 @@ func (locker *fileLocker) Lock() error {
 	}
 
 	if !locked {
-		return locker.OnWait(func() error {
+		if locker.OnWaitFunc != nil {
+			return locker.OnWaitFunc(func() error {
+				return locker.pollLock()
+			})
+		} else {
 			return locker.pollLock()
-		})
+		}
 	}
 
 	return nil
@@ -78,12 +82,19 @@ func (locker *fileLocker) pollLock() error {
 		}
 	}()
 
-	select {
-	case err := <-flockRes:
-		return err
-	case <-time.After(locker.Timeout):
-		cancelPoll <- true
-		return fmt.Errorf("%q file lock timeout %s expired", locker.FileLock.LockFilePath(), locker.Timeout)
+	if locker.Timeout != 0 {
+		select {
+		case err := <-flockRes:
+			return err
+		case <-time.After(locker.Timeout):
+			cancelPoll <- true
+			return fmt.Errorf("%q file lock timeout %s expired", locker.FileLock.LockFilePath(), locker.Timeout)
+		}
+	} else {
+		select {
+		case err := <-flockRes:
+			return err
+		}
 	}
 }
 
