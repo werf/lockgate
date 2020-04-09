@@ -19,12 +19,12 @@ type FileLock struct {
 	locker   *fileLocker
 }
 
-func (lock *FileLock) newLocker(timeout time.Duration, readOnly bool, onWait func(doWait func() error) error) *fileLocker {
+func (lock *FileLock) newLocker(timeout time.Duration, readOnly bool, onWaitFunc func(doWait func() error) error) *fileLocker {
 	return &fileLocker{
 		baseLocker: baseLocker{
-			Timeout:  timeout,
-			ReadOnly: readOnly,
-			OnWait:   onWait,
+			Timeout:    timeout,
+			ReadOnly:   readOnly,
+			OnWaitFunc: onWaitFunc,
 		},
 		FileLock: lock,
 	}

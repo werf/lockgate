@@ -11,9 +11,9 @@ type locker interface {
 }
 
 type baseLocker struct {
-	Timeout  time.Duration
-	ReadOnly bool
-	OnWait   func(doWait func() error) error
+	Timeout    time.Duration
+	ReadOnly   bool
+	OnWaitFunc func(doWait func() error) error
 }
 
 func (locker *baseLocker) TryLock() (bool, error) {
