@@ -23,38 +23,42 @@ func NewFileLockgate(locksDir string) (*FileLockgate, error) {
 	}, nil
 }
 
-func (locker *FileLockgate) getLock(name string) file_lock.LockObject {
-	if l, hasKey := locker.Locks[name]; hasKey {
+func (locker *FileLockgate) getLock(lockName string) file_lock.LockObject {
+	if l, hasKey := locker.Locks[lockName]; hasKey {
 		return l
 	}
 
-	locker.Locks[name] = file_lock.NewFileLock(name, locker.LocksDir)
-	return locker.Locks[name]
+	locker.Locks[lockName] = file_lock.NewFileLock(lockName, locker.LocksDir)
+	return locker.Locks[lockName]
 }
 
-func (locker *FileLockgate) Acquire(name string, opts AcquireOptions) (bool, error) {
-	lock := locker.getLock(name)
+func (locker *FileLockgate) Acquire(lockName string, opts AcquireOptions) (bool, error) {
+	lock := locker.getLock(lockName)
+
+	var wrappedOnWaitFunc func(doWait func() error) error
+	if opts.OnWaitFunc != nil {
+		wrappedOnWaitFunc = func(doWait func() error) error {
+			return opts.OnWaitFunc(lockName, doWait)
+		}
+	}
 
 	if opts.NonBlocking {
 		return lock.TryLock(opts.Shared)
 	} else {
-		return true, lock.Lock(
-			getTimeout(opts), opts.Shared,
-			opts.OnWaitFunc,
-		)
+		return true, lock.Lock(opts.Timeout, opts.Shared, wrappedOnWaitFunc)
 	}
 }
 
-func (locker *FileLockgate) Release(name string) error {
-	if _, hasKey := locker.Locks[name]; !hasKey {
-		panic(fmt.Sprintf("lock %q has not been acquired", name))
+func (locker *FileLockgate) Release(lockName string) error {
+	if _, hasKey := locker.Locks[lockName]; !hasKey {
+		panic(fmt.Sprintf("lock %q has not been acquired", lockName))
 	}
 
-	lock := locker.getLock(name)
+	lock := locker.getLock(lockName)
 	return lock.Unlock()
 }
 
-//func onWait(name string, doWait func() error) error {
+//func onWait(lockName string, doWait func() error) error {
 //	logProcessMsg := fmt.Sprintf("Waiting for locked resource %q", name)
 //	return logboek.LogProcessInline(logProcessMsg, logboek.LogProcessInlineOptions{}, func() error {
 //		return doWait()
