@@ -7,23 +7,23 @@ import (
 	"github.com/flant/lockgate/file_lock"
 )
 
-type FileLockgate struct {
+type FileLocker struct {
 	LocksDir string
 	Locks    map[string]file_lock.LockObject
 }
 
-func NewFileLockgate(locksDir string) (*FileLockgate, error) {
+func NewFileLocker(locksDir string) (*FileLocker, error) {
 	if err := os.MkdirAll(locksDir, 0755); err != nil {
 		return nil, fmt.Errorf("cannot create dir %s: %s", locksDir, err)
 	}
 
-	return &FileLockgate{
+	return &FileLocker{
 		LocksDir: locksDir,
 		Locks:    make(map[string]file_lock.LockObject),
 	}, nil
 }
 
-func (locker *FileLockgate) getLock(lockName string) file_lock.LockObject {
+func (locker *FileLocker) getLock(lockName string) file_lock.LockObject {
 	if l, hasKey := locker.Locks[lockName]; hasKey {
 		return l
 	}
@@ -32,7 +32,7 @@ func (locker *FileLockgate) getLock(lockName string) file_lock.LockObject {
 	return locker.Locks[lockName]
 }
 
-func (locker *FileLockgate) Acquire(lockName string, opts AcquireOptions) (bool, error) {
+func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, error) {
 	lock := locker.getLock(lockName)
 
 	var wrappedOnWaitFunc func(doWait func() error) error
@@ -49,7 +49,7 @@ func (locker *FileLockgate) Acquire(lockName string, opts AcquireOptions) (bool,
 	}
 }
 
-func (locker *FileLockgate) Release(lockName string) error {
+func (locker *FileLocker) Release(lockName string) error {
 	if _, hasKey := locker.Locks[lockName]; !hasKey {
 		panic(fmt.Sprintf("lock %q has not been acquired", lockName))
 	}
