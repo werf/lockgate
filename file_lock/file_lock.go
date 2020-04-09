@@ -1,4 +1,4 @@
-package shluz
+package file_lock
 
 import (
 	"fmt"
@@ -46,19 +46,6 @@ func (lock *FileLock) Unlock() error {
 	}
 
 	err := lock.BaseLock.Unlock(lock.locker)
-	if err != nil {
-		return err
-	}
-
-	lock.locker = nil
-
-	return nil
-}
-
-func (lock *FileLock) WithLock(timeout time.Duration, readOnly bool, onWait func(doWait func() error) error, f func() error) error {
-	lock.locker = lock.newLocker(timeout, readOnly, onWait)
-
-	err := lock.BaseLock.WithLock(lock.locker, f)
 	if err != nil {
 		return err
 	}
