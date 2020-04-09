@@ -1,4 +1,4 @@
-package shluz
+package file_lock
 
 import (
 	"time"
@@ -78,22 +78,4 @@ func (lock *BaseLock) Unlock(l locker) error {
 	}
 
 	return nil
-}
-
-func (lock *BaseLock) WithLock(locker locker, f func() error) (resErr error) {
-	if err := lock.Lock(locker); err != nil {
-		return err
-	}
-
-	defer func() {
-		if err := lock.Unlock(locker); err != nil {
-			if resErr == nil {
-				resErr = err
-			}
-		}
-	}()
-
-	resErr = f()
-
-	return
 }

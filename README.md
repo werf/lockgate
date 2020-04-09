@@ -1,64 +1,66 @@
-# Shluz
+# Lockgate
 
-Shluz is a locking library for go.
+Lockgate is a locking library for go.
 
-Currently only file locks are supported, processes that use locks should work on a single host and use the same locks directory (see `shluz.Init` function).
+ - File locks on the single host are supported.
+ - Kubernetes-based distributed locks will be supported soon.
 
 # Installation
 
 ```
-go get -u github.com/flant/shluz
+go get -u github.com/flant/lockgate
 ```
 
 # Usage
 
 ```
-import "github.com/flant/shluz"
+import "github.com/flant/lockgate"
 
 func main() {
-	if err := shluz.Init("locks_service_dir"); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to init shluz: %s\n", err)
+    locker, err := lockgate.NewFileLocker("locks_service_dir")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: failed to create file locker: %s\n", err)
 		os.Exit(1)
 	}
 
 	// Case 1
 
-	if err := Shluz.Lock("myresource", Shluz.LockOptions{ReadOnly: false, Timeout: 30*time.Second}); err != nil {
+	if err := locker.Acquire("myresource", lockgate.AcquireOptions{Shared: false, Timeout: 30*time.Second}); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: failed to lock myresource: %s\n", err)
 		os.Exit(1)
 	}
 
 	// ...
 
-	if err := Shluz.Unlock("myresource"); err != nil {
+	if err := locker.Release("myresource"); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: failed to unlock myresource: %s\n", err)
 		os.Exit(1)
 	}
 
 	// Case 2
 
-	if err := Shluz.WithLock("myresource", Shluz.LockOptions{ReadOnly: false, Timeout: 30*time.Second}, func() error {
+	if err := lockgate.WithAcquire(locker, "myresource", lockgate.AcquireOptions{Shared: false, Timeout: 30*time.Second}, func(acquired bool) error {
 		// ...
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to perform action with locked myresource: %s\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR: failed to perform an operation with locker myresource: %s\n", err)
 		os.Exit(1)
 	}
 
 	// Case 3
 
-	locked, err := Shluz.TryLock("myresource", Shluz.TryLockOptions{ReadOnly: false})
+	acquired, err := locker.Acquire("myresource", lockgate.AcquireOptions{Shared: false, NonBlocking: true})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: failed to lock myresource: %s\n", err)
 		os.Exit(1)
 	}
 
-	if locked {
+	if acquired {
 		// ...
 	} else {
 		// ...
 	}
 
-	if err := Shluz.Unlock("myresource"); err != nil {
+	if err := locker.Release("myresource"); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: failed to unlock myresource: %s\n", err)
 		os.Exit(1)
 	}

@@ -1,97 +1,62 @@
-package shluz
+package lockgate
 
 import (
 	"fmt"
-	"time"
+	"os"
 
-	"github.com/gofrs/flock"
+	"github.com/flant/lockgate/file_lock"
 )
 
-type fileLocker struct {
-	baseLocker
-
-	FileLock    *FileLock
-	lockHandler *flock.Flock
+type FileLockgate struct {
+	LocksDir string
+	Locks    map[string]file_lock.LockObject
 }
 
-func (locker *fileLocker) tryLock() (bool, error) {
-	if locker.lockHandler == nil {
-		panic("lockHandler is not set")
+func NewFileLockgate(locksDir string) (*FileLockgate, error) {
+	if err := os.MkdirAll(locksDir, 0755); err != nil {
+		return nil, fmt.Errorf("cannot create dir %s: %s", locksDir, err)
 	}
-	if locker.ReadOnly {
-		return locker.lockHandler.TryRLock()
-	}
-	return locker.lockHandler.TryLock()
+
+	return &FileLockgate{
+		LocksDir: locksDir,
+		Locks:    make(map[string]file_lock.LockObject),
+	}, nil
 }
 
-func (locker *fileLocker) TryLock() (bool, error) {
-	locker.lockHandler = flock.New(locker.FileLock.LockFilePath())
-
-	locked, err := locker.tryLock()
-	if err != nil {
-		return false, fmt.Errorf("error trying to lock file %s: %s", locker.FileLock.LockFilePath(), err)
+func (locker *FileLockgate) getLock(name string) file_lock.LockObject {
+	if l, hasKey := locker.Locks[name]; hasKey {
+		return l
 	}
 
-	return locked, nil
+	locker.Locks[name] = file_lock.NewFileLock(name, locker.LocksDir)
+	return locker.Locks[name]
 }
 
-func (locker *fileLocker) Lock() error {
-	locker.lockHandler = flock.New(locker.FileLock.LockFilePath())
+func (locker *FileLockgate) Acquire(name string, opts AcquireOptions) (bool, error) {
+	lock := locker.getLock(name)
 
-	locked, err := locker.tryLock()
-	if err != nil {
-		return fmt.Errorf("error trying to lock file %s: %s", locker.FileLock.LockFilePath(), err)
-	}
-
-	if !locked {
-		return locker.OnWait(func() error {
-			return locker.pollLock()
-		})
-	}
-
-	return nil
-}
-
-func (locker *fileLocker) pollLock() error {
-	flockRes := make(chan error)
-	cancelPoll := make(chan bool)
-
-	go func() {
-		ticker := time.NewTicker(time.Millisecond * 500)
-
-	PollFlock:
-		for {
-			select {
-			case <-ticker.C:
-				locked, err := locker.tryLock()
-				if err != nil {
-					flockRes <- fmt.Errorf("error trying to lock file %q while polling for lock: %s", locker.FileLock.LockFilePath(), err)
-					break PollFlock
-				}
-				if locked {
-					flockRes <- nil
-					break PollFlock
-				}
-			case <-cancelPoll:
-				break PollFlock
-			}
-		}
-	}()
-
-	select {
-	case err := <-flockRes:
-		return err
-	case <-time.After(locker.Timeout):
-		cancelPoll <- true
-		return fmt.Errorf("%q file lock timeout %s expired", locker.FileLock.LockFilePath(), locker.Timeout)
+	if opts.NonBlocking {
+		return lock.TryLock(opts.Shared)
+	} else {
+		return true, lock.Lock(
+			getTimeout(opts), opts.Shared,
+			opts.OnWaitFunc,
+		)
 	}
 }
 
-func (locker *fileLocker) Unlock() error {
-	if err := locker.lockHandler.Unlock(); err != nil {
-		return fmt.Errorf("error unlocking %q: %s", locker.FileLock.LockFilePath(), err)
+func (locker *FileLockgate) Release(name string) error {
+	if _, hasKey := locker.Locks[name]; !hasKey {
+		panic(fmt.Sprintf("lock %q has not been acquired", name))
 	}
-	locker.lockHandler = nil
 
-	return nil
+	lock := locker.getLock(name)
+	return lock.Unlock()
 }
+
+//func onWait(name string, doWait func() error) error {
+//	logProcessMsg := fmt.Sprintf("Waiting for locked resource %q", name)
+//	return logboek.LogProcessInline(logProcessMsg, logboek.LogProcessInlineOptions{}, func() error {
+//		return doWait()
+//	})
+//}
