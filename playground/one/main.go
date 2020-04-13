@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/flant/lockgate"
 
@@ -16,17 +17,24 @@ func do() error {
 		return fmt.Errorf("cannot initialize kube: %s", err)
 	}
 
-	if locker, err := lockgate.NewKubernetesLocker(
+	locker := lockgate.NewKubernetesLocker(
 		kube.DynamicClient, schema.GroupVersionResource{
 			Group:    "",
 			Version:  "v1",
 			Resource: "configmaps",
 		}, "mycm", "myns",
-	); err != nil {
-		return fmt.Errorf("init error: %s", err)
+	)
+
+	if _, lock, err := locker.Acquire("mylock", lockgate.AcquireOptions{}); err != nil {
+		return fmt.Errorf("acquire mylock error: %s", err)
 	} else {
-		if _, err := locker.Acquire("mylock", lockgate.AcquireOptions{}); err != nil {
-			return fmt.Errorf("acquire mylock error: %s", err)
+		fmt.Printf("ACQUIRED %#v!\n", lock)
+		for i := 0; i < 60; i++ {
+			time.Sleep(1 * time.Second)
+			fmt.Printf("%d\n", i)
+		}
+		if err := locker.Release(lock); err != nil {
+			return fmt.Errorf("release mylock error: %s", err)
 		}
 	}
 
