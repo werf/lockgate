@@ -18,16 +18,17 @@ func do() error {
 	if locker, err := lockgate.NewFileLocker("/tmp/locks"); err != nil {
 		return fmt.Errorf("init error: %s", err)
 	} else {
-		if _, err := locker.Acquire("mylock", lockgate.AcquireOptions{
-			OnWaitFunc: func(_ string, doWait func() error) error {
+		if _, lock, err := locker.Acquire("mylock", lockgate.AcquireOptions{
+			OnWaitFunc: func(_ lockgate.LockHandle, doWait func() error) error {
 				fmt.Printf("WAITING!\n")
 				defer fmt.Printf("DONE!")
 				return doWait()
 			},
 		}); err != nil {
 			return fmt.Errorf("acquire mylock error: %s", err)
+		} else {
+			defer locker.Release(lock)
 		}
-		defer locker.Release("mylock")
 	}
 
 	fmt.Printf("ACQUIRED!\n")

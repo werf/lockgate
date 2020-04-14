@@ -3,13 +3,18 @@ package lockgate
 import (
 	"fmt"
 	"os"
+	"sync"
+
+	"github.com/google/uuid"
 
 	"github.com/flant/lockgate/file_lock"
 )
 
 type FileLocker struct {
 	LocksDir string
-	Locks    map[string]file_lock.LockObject
+
+	mux   sync.Mutex
+	locks map[string]file_lock.LockObject
 }
 
 func NewFileLocker(locksDir string) (*FileLocker, error) {
@@ -19,48 +24,55 @@ func NewFileLocker(locksDir string) (*FileLocker, error) {
 
 	return &FileLocker{
 		LocksDir: locksDir,
-		Locks:    make(map[string]file_lock.LockObject),
+		locks:    make(map[string]file_lock.LockObject),
 	}, nil
 }
 
-func (locker *FileLocker) getLock(lockName string) file_lock.LockObject {
-	if l, hasKey := locker.Locks[lockName]; hasKey {
+func (locker *FileLocker) newLock(lockHandle LockHandle) file_lock.LockObject {
+	locker.mux.Lock()
+	defer locker.mux.Unlock()
+
+	if l, hasKey := locker.locks[lockHandle.ID]; hasKey {
 		return l
 	}
 
-	locker.Locks[lockName] = file_lock.NewFileLock(lockName, locker.LocksDir)
-	return locker.Locks[lockName]
+	locker.locks[lockHandle.ID] = file_lock.NewFileLock(lockHandle.LockName, locker.LocksDir)
+	return locker.locks[lockHandle.ID]
 }
 
-func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, error) {
-	lock := locker.getLock(lockName)
+func (locker *FileLocker) getLock(lockHandle LockHandle) file_lock.LockObject {
+	locker.mux.Lock()
+	defer locker.mux.Unlock()
+	return locker.locks[lockHandle.ID]
+}
+
+func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, LockHandle, error) {
+	lockHandle := LockHandle{
+		ID:       uuid.New().String(),
+		LockName: lockName,
+	}
+
+	lock := locker.newLock(lockHandle)
 
 	var wrappedOnWaitFunc func(doWait func() error) error
 	if opts.OnWaitFunc != nil {
 		wrappedOnWaitFunc = func(doWait func() error) error {
-			return opts.OnWaitFunc(lockName, doWait)
+			return opts.OnWaitFunc(lockHandle, doWait)
 		}
 	}
 
 	if opts.NonBlocking {
-		return lock.TryLock(opts.Shared)
+		acquired, err := lock.TryLock(opts.Shared)
+		return acquired, lockHandle, err
 	} else {
-		return true, lock.Lock(opts.Timeout, opts.Shared, wrappedOnWaitFunc)
+		return true, lockHandle, lock.Lock(opts.Timeout, opts.Shared, wrappedOnWaitFunc)
 	}
 }
 
-func (locker *FileLocker) Release(lockName string) error {
-	if _, hasKey := locker.Locks[lockName]; !hasKey {
-		panic(fmt.Sprintf("lock %q has not been acquired", lockName))
+func (locker *FileLocker) Release(lockHandle LockHandle) error {
+	if lock := locker.getLock(lockHandle); lock == nil {
+		return fmt.Errorf("unknown id %q for lock %q", lockHandle.ID, lockHandle.LockName)
+	} else {
+		return lock.Unlock()
 	}
-
-	lock := locker.getLock(lockName)
-	return lock.Unlock()
 }
-
-//func onWait(lockName string, doWait func() error) error {
-//	logProcessMsg := fmt.Sprintf("Waiting for locked resource %q", name)
-//	return logboek.LogProcessInline(logProcessMsg, logboek.LogProcessInlineOptions{}, func() error {
-//		return doWait()
-//	})
-//}
