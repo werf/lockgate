@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,13 +39,21 @@ type KubernetesLocker struct {
 	ResourceName        string
 	Namespace           string
 
-	mux               sync.Mutex
-	leaseRenewWorkers map[string]chan struct{}
+	mux sync.Mutex
+
+	leaseRenewWorkers map[string]*LeaseRenewWorkerDescriptor
 }
 
 type LockLeaseRecord struct {
 	LockHandle
-	ExpireAtTimestamp int64
+	ExpireAtTimestamp  int64
+	SharedHoldersCount int64
+	IsShared           bool
+}
+
+type LeaseRenewWorkerDescriptor struct {
+	DoneChan           chan struct{}
+	SharedLeaseCounter int64
 }
 
 func NewKubernetesLocker(kubernetesInterface dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, namespace string) *KubernetesLocker {
@@ -53,7 +62,7 @@ func NewKubernetesLocker(kubernetesInterface dynamic.Interface, gvr schema.Group
 		GVR:                 gvr,
 		ResourceName:        resourceName,
 		Namespace:           namespace,
-		leaseRenewWorkers:   make(map[string]chan struct{}),
+		leaseRenewWorkers:   make(map[string]*LeaseRenewWorkerDescriptor),
 	}
 }
 
@@ -100,10 +109,12 @@ func (locker *KubernetesLocker) updateResource(obj *unstructured.Unstructured) (
 	}
 }
 
-func (locker *KubernetesLocker) newLockLeaseRecord(lockName string) *LockLeaseRecord {
+func (locker *KubernetesLocker) newLockLeaseRecord(lockName string, isShared bool) *LockLeaseRecord {
 	return &LockLeaseRecord{
-		LockHandle:        LockHandle{ID: uuid.New().String(), LockName: lockName},
-		ExpireAtTimestamp: time.Now().Unix() + lockLeaseTTLSeconds,
+		LockHandle:         LockHandle{ID: uuid.New().String(), LockName: lockName},
+		ExpireAtTimestamp:  time.Now().Unix() + lockLeaseTTLSeconds,
+		SharedHoldersCount: 1,
+		IsShared:           isShared,
 	}
 }
 
@@ -165,18 +176,33 @@ RETRY_ACQUIRE:
 			if time.Now().After(time.Unix(oldLease.ExpireAtTimestamp, 0)) {
 				debug("(acquire lock %q)  old lease expired, take over with the new lease!", lockName)
 
-				newLease := locker.newLockLeaseRecord(lockName)
+				newLease := locker.newLockLeaseRecord(lockName, opts.Shared)
 				debug("(acquire lock %q)  new lease: %#v", lockName, newLease)
 
 				locker.setObjectLockLease(obj, newLease)
-				if _, err := locker.updateResource(obj); errors.IsConflict(err) {
-					debug("(acquire lock %q)  update %#v conflict! will retry acquire", lockName, obj)
+				if _, err := locker.updateResource(obj); isOptimisticLockingError(err) {
+					debug("(acquire lock %q)  update %#v optimistic locking error! Will retry acquire ...", lockName, obj)
 					goto RETRY_ACQUIRE
 				} else if err != nil {
 					return false, LockHandle{}, err
 				}
 				locker.runLeaseRenewWorker(newLease.LockHandle, opts)
 				return true, newLease.LockHandle, nil
+			}
+
+			if opts.Shared && oldLease.IsShared {
+				oldLease.SharedHoldersCount++
+				debug("(acquire lock %q)  incremented shared holders counter for existing lease: %#v", lockName, oldLease)
+				locker.setObjectLockLease(obj, oldLease)
+				if _, err := locker.updateResource(obj); isOptimisticLockingError(err) {
+					debug("(acquire lock %q)  update %#v optimistic locking error! Will retry acquire ...", lockName, obj)
+					goto RETRY_ACQUIRE
+				} else if err != nil {
+					return false, LockHandle{}, err
+				}
+				// always run lease worker even if our process already holds this lock
+				locker.runLeaseRenewWorker(oldLease.LockHandle, opts)
+				return true, oldLease.LockHandle, nil
 			}
 
 			if opts.NonBlocking {
@@ -190,12 +216,12 @@ RETRY_ACQUIRE:
 			goto RETRY_ACQUIRE
 		}
 
-		newLease := locker.newLockLeaseRecord(lockName)
+		newLease := locker.newLockLeaseRecord(lockName, opts.Shared)
 		debug("(acquire lock %q)  new lease: %#v", lockName, newLease)
 
 		locker.setObjectLockLease(obj, newLease)
-		if _, err := locker.updateResource(obj); errors.IsConflict(err) {
-			debug("(acquire lock %q)  update %#v conflict! Will retry acquire...", lockName, obj)
+		if _, err := locker.updateResource(obj); isOptimisticLockingError(err) {
+			debug("(acquire lock %q)  update %#v optimistic locking error! Will retry acquire...", lockName, obj)
 			goto RETRY_ACQUIRE
 		} else if err != nil {
 			return false, LockHandle{}, err
@@ -211,7 +237,14 @@ func (locker *KubernetesLocker) release(lockHandle LockHandle) error {
 	}
 
 	return locker.changeLease(lockHandle, func(obj *unstructured.Unstructured, currentLease *LockLeaseRecord) error {
-		locker.unsetObjectLockLease(obj, lockHandle.LockName)
+		currentLease.SharedHoldersCount--
+
+		if currentLease.SharedHoldersCount == 0 {
+			locker.unsetObjectLockLease(obj, lockHandle.LockName)
+		} else {
+			locker.setObjectLockLease(obj, currentLease)
+		}
+
 		return nil
 	})
 }
@@ -220,12 +253,15 @@ func (locker *KubernetesLocker) stopLeaseRenewWorker(lockHandle LockHandle) erro
 	locker.mux.Lock()
 	defer locker.mux.Unlock()
 
-	if doneChan, hasKey := locker.leaseRenewWorkers[lockHandle.ID]; !hasKey {
+	if desc, hasKey := locker.leaseRenewWorkers[lockHandle.ID]; !hasKey {
 		return fmt.Errorf("unknown id %q for lock %q", lockHandle.ID, lockHandle.LockName)
 	} else {
-		doneChan <- struct{}{}
-		close(doneChan)
-		delete(locker.leaseRenewWorkers, lockHandle.ID)
+		desc.SharedLeaseCounter--
+		if desc.SharedLeaseCounter == 0 {
+			desc.DoneChan <- struct{}{}
+			close(desc.DoneChan)
+			delete(locker.leaseRenewWorkers, lockHandle.ID)
+		}
 	}
 
 	return nil
@@ -243,8 +279,16 @@ func (locker *KubernetesLocker) runLeaseRenewWorker(lockHandle LockHandle, opts 
 	locker.mux.Lock()
 	defer locker.mux.Unlock()
 
-	locker.leaseRenewWorkers[lockHandle.ID] = make(chan struct{}, 0)
-	go locker.leaseRenewWorker(lockHandle, opts, locker.leaseRenewWorkers[lockHandle.ID])
+	if desc, hasKey := locker.leaseRenewWorkers[lockHandle.ID]; !hasKey {
+		desc := &LeaseRenewWorkerDescriptor{
+			DoneChan:           make(chan struct{}, 0),
+			SharedLeaseCounter: 1,
+		}
+		locker.leaseRenewWorkers[lockHandle.ID] = desc
+		go locker.leaseRenewWorker(lockHandle, opts, desc.DoneChan)
+	} else {
+		desc.SharedLeaseCounter++
+	}
 }
 
 func (locker *KubernetesLocker) leaseRenewWorker(lockHandle LockHandle, opts AcquireOptions, doneChan chan struct{}) {
@@ -306,8 +350,8 @@ RETRY_CHANGE:
 			}
 		}
 
-		if _, err := locker.updateResource(obj); errors.IsConflict(err) {
-			debug("(change lock %q lease)  update %#v conflict! Will retry...", lockHandle.LockName, obj)
+		if _, err := locker.updateResource(obj); isOptimisticLockingError(err) {
+			debug("(change lock %q lease)  update %#v optimistic locking error! Will retry change...", lockHandle.LockName, obj)
 			goto RETRY_CHANGE
 		} else if err != nil {
 			return err
@@ -321,4 +365,11 @@ func debug(format string, args ...interface{}) {
 	if os.Getenv("LOCKGATE_DEBUG") == "1" {
 		fmt.Printf("LOCKGATE_DEBUG: %s\n", fmt.Sprintf(format, args...))
 	}
+}
+
+func isOptimisticLockingError(err error) bool {
+	if err != nil {
+		return strings.HasSuffix(err.Error(), "the object has been modified; please apply your changes to the latest version and try again")
+	}
+	return false
 }
