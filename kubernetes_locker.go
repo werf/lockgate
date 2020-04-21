@@ -44,7 +44,7 @@ type KubernetesLocker struct {
 
 type LockLeaseRecord struct {
 	LockHandle
-	ExpiredAtTimestamp int64
+	ExpireAtTimestamp int64
 }
 
 func NewKubernetesLocker(kubernetesInterface dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, namespace string) *KubernetesLocker {
@@ -58,10 +58,12 @@ func NewKubernetesLocker(kubernetesInterface dynamic.Interface, gvr schema.Group
 }
 
 func (locker *KubernetesLocker) Acquire(lockName string, opts AcquireOptions) (bool, LockHandle, error) {
+	debug("(acquire lock %q) opts=%#v", lockName, opts)
 	return locker.acquire(lockName, opts)
 }
 
 func (locker *KubernetesLocker) Release(lockHandle LockHandle) error {
+	debug("(release lock %q)  %#v", lockHandle.LockName, lockHandle)
 	return locker.release(lockHandle)
 }
 
@@ -100,8 +102,8 @@ func (locker *KubernetesLocker) updateResource(obj *unstructured.Unstructured) (
 
 func (locker *KubernetesLocker) newLockLeaseRecord(lockName string) *LockLeaseRecord {
 	return &LockLeaseRecord{
-		LockHandle:         LockHandle{ID: uuid.New().String(), LockName: lockName},
-		ExpiredAtTimestamp: time.Now().Unix() + lockLeaseTTLSeconds,
+		LockHandle:        LockHandle{ID: uuid.New().String(), LockName: lockName},
+		ExpireAtTimestamp: time.Now().Unix() + lockLeaseTTLSeconds,
 	}
 }
 
@@ -137,8 +139,14 @@ func (locker *KubernetesLocker) setObjectLockLease(obj *unstructured.Unstructure
 
 func (locker *KubernetesLocker) unsetObjectLockLease(obj *unstructured.Unstructured, lockName string) {
 	annots := obj.GetAnnotations()
-	delete(annots, locker.objectLockLeaseAnnotationName(lockName))
-	obj.SetAnnotations(annots)
+	if annots != nil {
+		delete(annots, locker.objectLockLeaseAnnotationName(lockName))
+		if len(annots) == 0 {
+			obj.SetAnnotations(nil)
+		} else {
+			obj.SetAnnotations(annots)
+		}
+	}
 }
 
 func (locker *KubernetesLocker) acquire(lockName string, opts AcquireOptions) (bool, LockHandle, error) {
@@ -154,7 +162,7 @@ RETRY_ACQUIRE:
 		} else if oldLease != nil {
 			debug("(acquire lock %q)  oldLease -> %#v", lockName, oldLease)
 
-			if time.Now().After(time.Unix(oldLease.ExpiredAtTimestamp, 0)) {
+			if time.Now().After(time.Unix(oldLease.ExpireAtTimestamp, 0)) {
 				debug("(acquire lock %q)  old lease expired, take over with the new lease!", lockName)
 
 				newLease := locker.newLockLeaseRecord(lockName)
@@ -216,9 +224,19 @@ func (locker *KubernetesLocker) stopLeaseRenewWorker(lockHandle LockHandle) erro
 		return fmt.Errorf("unknown id %q for lock %q", lockHandle.ID, lockHandle.LockName)
 	} else {
 		doneChan <- struct{}{}
+		close(doneChan)
+		delete(locker.leaseRenewWorkers, lockHandle.ID)
 	}
 
 	return nil
+}
+
+func (locker *KubernetesLocker) isLeaseRenewWorkerActive(lockHandle LockHandle) bool {
+	locker.mux.Lock()
+	defer locker.mux.Unlock()
+
+	_, hasKey := locker.leaseRenewWorkers[lockHandle.ID]
+	return hasKey
 }
 
 func (locker *KubernetesLocker) runLeaseRenewWorker(lockHandle LockHandle, opts AcquireOptions) {
@@ -226,16 +244,24 @@ func (locker *KubernetesLocker) runLeaseRenewWorker(lockHandle LockHandle, opts 
 	defer locker.mux.Unlock()
 
 	locker.leaseRenewWorkers[lockHandle.ID] = make(chan struct{}, 0)
-	go locker.extendLeaseRenewWorker(lockHandle, opts, locker.leaseRenewWorkers[lockHandle.ID])
+	go locker.leaseRenewWorker(lockHandle, opts, locker.leaseRenewWorkers[lockHandle.ID])
 }
 
-func (locker *KubernetesLocker) extendLeaseRenewWorker(lockHandle LockHandle, opts AcquireOptions, doneChan chan struct{}) {
+func (locker *KubernetesLocker) leaseRenewWorker(lockHandle LockHandle, opts AcquireOptions, doneChan chan struct{}) {
 	ticker := time.NewTicker(lockLeaseRenewPeriodSeconds * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			if err := locker.extendLease(lockHandle); err == ErrLockAlreadyLeased || err == ErrNoExistingLockLeaseFound {
+			debug("(leaseRenewWorker %q %q) tick!", lockHandle.LockName, lockHandle.ID)
+
+			if !locker.isLeaseRenewWorkerActive(lockHandle) {
+				debug("(leaseRenewWorker %q %q) already stopped, ignore check")
+				continue
+			}
+
+			if err := locker.renewLease(lockHandle); err == ErrLockAlreadyLeased || err == ErrNoExistingLockLeaseFound {
 				fmt.Fprintf(os.Stderr, "ERROR: lost lease %s for lock %q\n", lockHandle.ID, lockHandle.LockName)
 				if err := opts.OnLostLeaseFunc(lockHandle); err != nil {
 					fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
@@ -244,14 +270,17 @@ func (locker *KubernetesLocker) extendLeaseRenewWorker(lockHandle LockHandle, op
 			} else if err != nil {
 				fmt.Fprintf(os.Stderr, "ERROR: cannot extend lease %s for lock %q: %s\n", lockHandle.ID, lockHandle.LockName, err)
 			}
+
 		case <-doneChan:
+			debug("(leaseRenewWorker %q %q) stopped!", lockHandle.LockName, lockHandle.ID)
+			return
 		}
 	}
 }
 
-func (locker *KubernetesLocker) extendLease(lockHandle LockHandle) error {
+func (locker *KubernetesLocker) renewLease(lockHandle LockHandle) error {
 	return locker.changeLease(lockHandle, func(obj *unstructured.Unstructured, lease *LockLeaseRecord) error {
-		lease.ExpiredAtTimestamp = time.Now().Unix() + lockLeaseTTLSeconds
+		lease.ExpireAtTimestamp = time.Now().Unix() + lockLeaseTTLSeconds
 		locker.setObjectLockLease(obj, lease)
 		return nil
 	})
