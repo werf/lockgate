@@ -15,7 +15,7 @@ type Locker interface {
 }
 
 type LockHandle struct {
-	ID       string
+	UUID     string
 	LockName string
 }
 

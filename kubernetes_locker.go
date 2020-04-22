@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flant/lockgate/pkg/util"
+
 	default_errors "errors"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -111,7 +113,7 @@ func (locker *KubernetesLocker) updateResource(obj *unstructured.Unstructured) (
 
 func (locker *KubernetesLocker) newLockLeaseRecord(lockName string, isShared bool) *LockLeaseRecord {
 	return &LockLeaseRecord{
-		LockHandle:         LockHandle{ID: uuid.New().String(), LockName: lockName},
+		LockHandle:         LockHandle{UUID: uuid.New().String(), LockName: lockName},
 		ExpireAtTimestamp:  time.Now().Unix() + lockLeaseTTLSeconds,
 		SharedHoldersCount: 1,
 		IsShared:           isShared,
@@ -119,7 +121,7 @@ func (locker *KubernetesLocker) newLockLeaseRecord(lockName string, isShared boo
 }
 
 func (locker *KubernetesLocker) objectLockLeaseAnnotationName(lockName string) string {
-	return fmt.Sprintf("lockgate.io/%s", lockName)
+	return fmt.Sprintf("lockgate.io/%s", util.Sha3_224Hash(lockName))
 }
 
 func (locker *KubernetesLocker) extractObjectLockLease(obj *unstructured.Unstructured, lockName string) (*LockLeaseRecord, error) {
@@ -192,6 +194,7 @@ RETRY_ACQUIRE:
 
 			if opts.Shared && oldLease.IsShared {
 				oldLease.SharedHoldersCount++
+				oldLease.ExpireAtTimestamp = time.Now().Unix() + lockLeaseTTLSeconds
 				debug("(acquire lock %q)  incremented shared holders counter for existing lease: %#v", lockName, oldLease)
 				locker.setObjectLockLease(obj, oldLease)
 				if _, err := locker.updateResource(obj); isOptimisticLockingError(err) {
@@ -253,14 +256,14 @@ func (locker *KubernetesLocker) stopLeaseRenewWorker(lockHandle LockHandle) erro
 	locker.mux.Lock()
 	defer locker.mux.Unlock()
 
-	if desc, hasKey := locker.leaseRenewWorkers[lockHandle.ID]; !hasKey {
-		return fmt.Errorf("unknown id %q for lock %q", lockHandle.ID, lockHandle.LockName)
+	if desc, hasKey := locker.leaseRenewWorkers[lockHandle.UUID]; !hasKey {
+		return fmt.Errorf("unknown id %q for lock %q", lockHandle.UUID, lockHandle.LockName)
 	} else {
 		desc.SharedLeaseCounter--
 		if desc.SharedLeaseCounter == 0 {
 			desc.DoneChan <- struct{}{}
 			close(desc.DoneChan)
-			delete(locker.leaseRenewWorkers, lockHandle.ID)
+			delete(locker.leaseRenewWorkers, lockHandle.UUID)
 		}
 	}
 
@@ -271,7 +274,7 @@ func (locker *KubernetesLocker) isLeaseRenewWorkerActive(lockHandle LockHandle) 
 	locker.mux.Lock()
 	defer locker.mux.Unlock()
 
-	_, hasKey := locker.leaseRenewWorkers[lockHandle.ID]
+	_, hasKey := locker.leaseRenewWorkers[lockHandle.UUID]
 	return hasKey
 }
 
@@ -279,12 +282,12 @@ func (locker *KubernetesLocker) runLeaseRenewWorker(lockHandle LockHandle, opts 
 	locker.mux.Lock()
 	defer locker.mux.Unlock()
 
-	if desc, hasKey := locker.leaseRenewWorkers[lockHandle.ID]; !hasKey {
+	if desc, hasKey := locker.leaseRenewWorkers[lockHandle.UUID]; !hasKey {
 		desc := &LeaseRenewWorkerDescriptor{
 			DoneChan:           make(chan struct{}, 0),
 			SharedLeaseCounter: 1,
 		}
-		locker.leaseRenewWorkers[lockHandle.ID] = desc
+		locker.leaseRenewWorkers[lockHandle.UUID] = desc
 		go locker.leaseRenewWorker(lockHandle, opts, desc.DoneChan)
 	} else {
 		desc.SharedLeaseCounter++
@@ -298,7 +301,7 @@ func (locker *KubernetesLocker) leaseRenewWorker(lockHandle LockHandle, opts Acq
 	for {
 		select {
 		case <-ticker.C:
-			debug("(leaseRenewWorker %q %q) tick!", lockHandle.LockName, lockHandle.ID)
+			debug("(leaseRenewWorker %q %q) tick!", lockHandle.LockName, lockHandle.UUID)
 
 			if !locker.isLeaseRenewWorkerActive(lockHandle) {
 				debug("(leaseRenewWorker %q %q) already stopped, ignore check")
@@ -306,17 +309,17 @@ func (locker *KubernetesLocker) leaseRenewWorker(lockHandle LockHandle, opts Acq
 			}
 
 			if err := locker.renewLease(lockHandle); err == ErrLockAlreadyLeased || err == ErrNoExistingLockLeaseFound {
-				fmt.Fprintf(os.Stderr, "ERROR: lost lease %s for lock %q\n", lockHandle.ID, lockHandle.LockName)
+				fmt.Fprintf(os.Stderr, "ERROR: lost lease %s for lock %q\n", lockHandle.UUID, lockHandle.LockName)
 				if err := opts.OnLostLeaseFunc(lockHandle); err != nil {
 					fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
 				}
 				return
 			} else if err != nil {
-				fmt.Fprintf(os.Stderr, "ERROR: cannot extend lease %s for lock %q: %s\n", lockHandle.ID, lockHandle.LockName, err)
+				fmt.Fprintf(os.Stderr, "ERROR: cannot extend lease %s for lock %q: %s\n", lockHandle.UUID, lockHandle.LockName, err)
 			}
 
 		case <-doneChan:
-			debug("(leaseRenewWorker %q %q) stopped!", lockHandle.LockName, lockHandle.ID)
+			debug("(leaseRenewWorker %q %q) stopped!", lockHandle.LockName, lockHandle.UUID)
 			return
 		}
 	}
@@ -342,7 +345,7 @@ RETRY_CHANGE:
 			return err
 		} else if currentLease == nil {
 			return ErrNoExistingLockLeaseFound
-		} else if currentLease.ID != lockHandle.ID {
+		} else if currentLease.UUID != lockHandle.UUID {
 			return ErrLockAlreadyLeased
 		} else {
 			if err := changeFunc(obj, currentLease); err != nil {

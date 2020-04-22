@@ -1,12 +1,10 @@
 package file_lock
 
 import (
-	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/spaolacci/murmur3"
+	"github.com/flant/werf/pkg/util"
 )
 
 func NewFileLock(name string, locksDir string) LockObject {
@@ -56,13 +54,8 @@ func (lock *FileLock) Unlock() error {
 }
 
 func (lock *FileLock) LockFilePath() string {
-	fileName := MurmurHash(lock.GetName())
+	// TODO: change to sha256 in the next major version
+	// TODO: cannot change for now without breaking backward compatibility
+	fileName := util.MurmurHash(lock.GetName())
 	return filepath.Join(lock.LocksDir, fileName)
-}
-
-func MurmurHash(args ...string) string {
-	h32 := murmur3.New32()
-	h32.Write([]byte(strings.Join(args, ":::")))
-	sum := h32.Sum32()
-	return fmt.Sprintf("%x", sum)
 }
