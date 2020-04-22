@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/flant/lockgate/file_lock"
+	"github.com/flant/lockgate/pkg/file_lock"
 )
 
 type FileLocker struct {
@@ -32,23 +32,23 @@ func (locker *FileLocker) newLock(lockHandle LockHandle) file_lock.LockObject {
 	locker.mux.Lock()
 	defer locker.mux.Unlock()
 
-	if l, hasKey := locker.locks[lockHandle.ID]; hasKey {
+	if l, hasKey := locker.locks[lockHandle.UUID]; hasKey {
 		return l
 	}
 
-	locker.locks[lockHandle.ID] = file_lock.NewFileLock(lockHandle.LockName, locker.LocksDir)
-	return locker.locks[lockHandle.ID]
+	locker.locks[lockHandle.UUID] = file_lock.NewFileLock(lockHandle.LockName, locker.LocksDir)
+	return locker.locks[lockHandle.UUID]
 }
 
 func (locker *FileLocker) getLock(lockHandle LockHandle) file_lock.LockObject {
 	locker.mux.Lock()
 	defer locker.mux.Unlock()
-	return locker.locks[lockHandle.ID]
+	return locker.locks[lockHandle.UUID]
 }
 
 func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, LockHandle, error) {
 	lockHandle := LockHandle{
-		ID:       uuid.New().String(),
+		UUID:     uuid.New().String(),
 		LockName: lockName,
 	}
 
@@ -71,7 +71,7 @@ func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, L
 
 func (locker *FileLocker) Release(lockHandle LockHandle) error {
 	if lock := locker.getLock(lockHandle); lock == nil {
-		return fmt.Errorf("unknown id %q for lock %q", lockHandle.ID, lockHandle.LockName)
+		return fmt.Errorf("unknown id %q for lock %q", lockHandle.UUID, lockHandle.LockName)
 	} else {
 		return lock.Unlock()
 	}
