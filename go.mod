@@ -15,6 +15,7 @@ require (
 	github.com/onsi/gomega v1.7.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.4.0 // indirect
+	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586
 	golang.org/x/sys v0.0.0-20191022100944-742c48ecaeb7 // indirect
 	k8s.io/apimachinery v0.16.8-beta.0
 	k8s.io/client-go v0.16.7
