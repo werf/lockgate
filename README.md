@@ -2,7 +2,7 @@
 
 Lockgate is a locking library for go.
 
- - Classical abstract interface with 2 modes of locking: shared and exclusive.
+ - Classical interface with 2 modes of locking: shared and exclusive.
  - File locks on the single host are supported.
  - Kubernetes-based distributed locks are supported.
    - Kubernetes locker is configured by an arbitrary kubernetes resource.
