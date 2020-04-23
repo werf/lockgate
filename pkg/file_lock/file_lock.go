@@ -4,7 +4,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/flant/werf/pkg/util"
+	"github.com/flant/lockgate/pkg/util"
+)
+
+var (
+	LegacyHashFunction = false
 )
 
 func NewFileLock(name string, locksDir string) LockObject {
@@ -56,6 +60,12 @@ func (lock *FileLock) Unlock() error {
 func (lock *FileLock) LockFilePath() string {
 	// TODO: change to sha256 in the next major version
 	// TODO: cannot change for now without breaking backward compatibility
-	fileName := util.MurmurHash(lock.GetName())
+	var fileName string
+	if LegacyHashFunction {
+		fileName = util.MurmurHash(lock.GetName())
+	} else {
+		fileName = util.Sha256Hash(lock.GetName())
+	}
+
 	return filepath.Join(lock.LocksDir, fileName)
 }
