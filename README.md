@@ -13,6 +13,8 @@ Lockgate is a locking library for go.
 
 This library is used in the [werf CI/CD tool](https://github.com/flant/werf) to implement synchronization of multiple werf build and deploy processes running from single or multiple hosts using Kubernetes or local file locks.
 
+If you have an Open Source project using lockgate, feel free to list it here.
+
 # Installation
 
 ```
