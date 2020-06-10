@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/flant/lockgate/pkg/file_lock"
+	"github.com/werf/lockgate/pkg/file_lock"
 )
 
 type FileLocker struct {

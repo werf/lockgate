@@ -11,14 +11,14 @@ Lockgate is a locking library for go.
    - locks are stored in the annotations of the specified resource;
    - properly use native kubernetes optimistic locking to handle simultaneous access to the resource.
 
-This library is used in the [werf CI/CD tool](https://github.com/flant/werf) to implement synchronization of multiple werf build and deploy processes running from single or multiple hosts using Kubernetes or local file locks.
+This library is used in the [werf CI/CD tool](https://github.com/werf/werf) to implement synchronization of multiple werf build and deploy processes running from single or multiple hosts using Kubernetes or local file locks.
 
 If you have an Open Source project using lockgate, feel free to list it here.
 
 # Installation
 
 ```
-go get -u github.com/flant/lockgate
+go get -u github.com/werf/lockgate
 ```
 
 # Usage
@@ -26,7 +26,7 @@ go get -u github.com/flant/lockgate
 In the following example a `locker` object instance is created using either `NewFileLocker` or `NewKubernetesLocker` constructor — user should select needed locker implementation. The rest of the sample uses lockgate.Locker interface to acquire and release locks.
 
 ```
-import "github.com/flant/lockgate"
+import "github.com/werf/lockgate"
 
 func main() {
 	// Create Kubernetes based locker in ns/mynamespace cm/myconfigmap.

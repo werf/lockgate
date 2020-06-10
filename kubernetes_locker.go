@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flant/lockgate/pkg/util"
+	"github.com/werf/lockgate/pkg/util"
 
 	default_errors "errors"
 
