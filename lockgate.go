@@ -24,7 +24,7 @@ type AcquireOptions struct {
 	Timeout     time.Duration
 	Shared      bool
 
-	OnWaitFunc      func(lock LockHandle, doWait func() error) error
+	OnWaitFunc      func(lockName string, doWait func() error) error
 	OnLostLeaseFunc func(lock LockHandle) error
 }
 

@@ -70,7 +70,7 @@ func NewKubernetesLocker(kubernetesInterface dynamic.Interface, gvr schema.Group
 
 func (locker *KubernetesLocker) Acquire(lockName string, opts AcquireOptions) (bool, LockHandle, error) {
 	debug("(acquire lock %q) opts=%#v", lockName, opts)
-	return locker.acquire(lockName, opts)
+	return locker.acquire(lockName, opts, true)
 }
 
 func (locker *KubernetesLocker) Release(lockHandle LockHandle) error {
@@ -162,7 +162,7 @@ func (locker *KubernetesLocker) unsetObjectLockLease(obj *unstructured.Unstructu
 	}
 }
 
-func (locker *KubernetesLocker) acquire(lockName string, opts AcquireOptions) (bool, LockHandle, error) {
+func (locker *KubernetesLocker) acquire(lockName string, opts AcquireOptions, shouldCallOnWait bool) (bool, LockHandle, error) {
 RETRY_ACQUIRE:
 
 	if obj, err := locker.getResource(); err != nil {
@@ -215,8 +215,25 @@ RETRY_ACQUIRE:
 
 			debug("(acquire lock %q)  poll lock: will retry in %d seconds", lockName, lockPollRetryPeriodSeconds)
 			debug("(acquire lock %q)  ---", lockName)
-			time.Sleep(lockPollRetryPeriodSeconds * time.Second)
-			goto RETRY_ACQUIRE
+
+			if opts.OnWaitFunc != nil && shouldCallOnWait {
+				var acquireLocked bool
+				var acquireHandle LockHandle
+				var acquireErr error
+
+				if err := opts.OnWaitFunc(lockName, func() error {
+					time.Sleep(lockPollRetryPeriodSeconds * time.Second)
+					acquireLocked, acquireHandle, acquireErr = locker.acquire(lockName, opts, false)
+					return acquireErr
+				}); err != nil {
+					return acquireLocked, acquireHandle, err
+				}
+
+				return acquireLocked, acquireHandle, acquireErr
+			} else {
+				time.Sleep(lockPollRetryPeriodSeconds * time.Second)
+				goto RETRY_ACQUIRE
+			}
 		}
 
 		newLease := locker.newLockLeaseRecord(lockName, opts.Shared)

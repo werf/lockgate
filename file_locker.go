@@ -57,7 +57,7 @@ func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, L
 	var wrappedOnWaitFunc func(doWait func() error) error
 	if opts.OnWaitFunc != nil {
 		wrappedOnWaitFunc = func(doWait func() error) error {
-			return opts.OnWaitFunc(lockHandle, doWait)
+			return opts.OnWaitFunc(lockName, doWait)
 		}
 	}
 
