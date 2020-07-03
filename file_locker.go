@@ -40,10 +40,16 @@ func (locker *FileLocker) newLock(lockHandle LockHandle) file_lock.LockObject {
 	return locker.locks[lockHandle.UUID]
 }
 
-func (locker *FileLocker) getLock(lockHandle LockHandle) file_lock.LockObject {
+func (locker *FileLocker) getAndRemoveLock(lockHandle LockHandle) file_lock.LockObject {
 	locker.mux.Lock()
 	defer locker.mux.Unlock()
-	return locker.locks[lockHandle.UUID]
+
+	if lock, hasKey := locker.locks[lockHandle.UUID]; hasKey {
+		delete(locker.locks, lockHandle.UUID)
+		return lock
+	}
+
+	return nil
 }
 
 func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, LockHandle, error) {
@@ -70,7 +76,7 @@ func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, L
 }
 
 func (locker *FileLocker) Release(lockHandle LockHandle) error {
-	if lock := locker.getLock(lockHandle); lock == nil {
+	if lock := locker.getAndRemoveLock(lockHandle); lock == nil {
 		return fmt.Errorf("unknown id %q for lock %q", lockHandle.UUID, lockHandle.LockName)
 	} else {
 		return lock.Unlock()
