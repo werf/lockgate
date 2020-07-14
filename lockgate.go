@@ -15,8 +15,8 @@ type Locker interface {
 }
 
 type LockHandle struct {
-	UUID     string
-	LockName string
+	UUID     string `json:"uuid"`
+	LockName string `json:"lockName"`
 }
 
 type AcquireOptions struct {
