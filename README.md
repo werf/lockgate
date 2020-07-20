@@ -10,6 +10,10 @@ Lockgate is a locking library for go.
    - kubernetes locker is configured by an arbitrary kubernetes resource;
    - locks are stored in the annotations of the specified resource;
    - properly use native kubernetes optimistic locking to handle simultaneous access to the resource.
+ - Locks using http lockgate locks server are supported:
+   - lockgate locks server may be run as a standalone process or multiple kubernetes-backed processes:
+      - lockgate locks server uses in-memory or kubernetes key-value storage with optimistic-locks;
+   - user specifies URL of lock server instance in the userspace code to use locks over http;
 
 This library is used in the [werf CI/CD tool](https://github.com/werf/werf) to implement synchronization of multiple werf build and deploy processes running from single or multiple hosts using Kubernetes or local file locks.
 
