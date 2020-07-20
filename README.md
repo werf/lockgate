@@ -23,20 +23,109 @@ go get -u github.com/werf/lockgate
 
 # Usage
 
-In the following example a `locker` object instance is created using either `NewFileLocker` or `NewKubernetesLocker` constructor — user should select needed locker implementation. The rest of the sample uses lockgate.Locker interface to acquire and release locks.
+
+## Select a locker
+
+The main interface of the library which user interacts with is `lockgate.Locker`. There are multiple implementations of locker available: file locker, kubernetes locker and http locker.
+
+### File locker
+
+This is a simple OS filesystem locks based locker, which can be used by multiple processes on the single host filesystem.
+
+Create a file locker as follows:
+
+```
+import "github.com/werf/lockgate"
+
+...
+
+locker, err := lockgate.NewFileLocker("/var/lock/myapp")
+```
+
+All cooperating processes should use the same locks directory.
+
+### Kubernetes locker
+
+This locker uses specified kubernetes resource as a storage for locker data. Multiple processes which use this locker should have an access to the same kubernetes cluster.
+
+This locker allows distributed locking over multiple hosts.
+
+Create kubernetes locker as follows:
+
+```
+import "github.com/werf/lockgate"
+
+...
+
+// Initialize kubeDynamicClient from https://github.com/kubernetes/client-go.
+locker, err := lockgate.NewKubernetesLocker(
+	kubeDynamicClient, schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "configmaps",
+	}, "mycm", "myns",
+)
+```
+
+All cooperating processes should use the same kubernetes-params. In this example locks data will be stored in the Namesapce "myns" ConfigMap "mycm".
+
+### Http locker
+
+This locker uses lockgate http server to organize locks and allows distributed locking over multiple hosts.
+
+Create http locker as follows:
+
+```
+import "github.com/werf/lockgate"
+
+...
+
+locker := lockgate.NewHttpLocker("http://localhost:55589")
+```
+
+All cooperating processes should use the same kubernetes-params. In this example there should be lockgate http locker server avaiable at `localhost:55589` address. See below how to bring up such server.
+
+## Lockgate http locker server
+
+Lockgate http server can use memory-storage or kubernetes-storage. There can be only 1 instance of lockgate server, that uses memory storage and there can be arbitrary number of servers that use kubernetes-storage.
+
+Run lockgate http locker server as follows:
+
+```
+import "github.com/werf/lockgate"
+import "github.com/werf/lockgate/pkg/distributed_locker"
+import "github.com/werf/lockgate/pkg/distributed_locker/optimistic_locking_store"
+
+...
+store := optimistic_locking_store.NewInMemoryStore()
+// OR
+// store := optimistic_locking_store.NewKubernetesResourceAnnotationsStore(
+//	kube.DynamicClient, schema.GroupVersionResource{
+//		Group:    "",
+//		Version:  "v1",
+//		Resource: "configmaps",
+//	}, "mycm", "myns",
+//)
+backend := distributed_locker.NewOptimisticLockingStorageBasedBackend(store)
+distributed_locker.RunHttpBackendServer("0.0.0.0", "55589", backend)
+```
+
+## Locker usage
+
+In the following example a `locker` object instance is created using one of the ways documented above — user should select needed locker implementation. The rest of the sample uses generic lockgate.Locker interface to acquire and release locks.
 
 ```
 import "github.com/werf/lockgate"
 
 func main() {
 	// Create Kubernetes based locker in ns/mynamespace cm/myconfigmap.
-	// Initialize kubeDynamicClient from https://github.com/kubernetes/client-go.
-        locker := lockgate.NewKubernetesLocker(                                                          
-                kubeDynamicClient, schema.GroupVersionResource{                                         
-                        Group:    "",                                                                    
-                        Version:  "v1",                                                                  
-                        Resource: "configmaps",                                                          
-                }, "myconfigmap", "mynamespace",                                                              
+	// Initialize kubeDynamicClient using https://github.com/kubernetes/client-go.
+        locker := lockgate.NewKubernetesLocker(
+                kubeDynamicClient, schema.GroupVersionResource{
+                        Group:    "",
+                        Version:  "v1",
+                        Resource: "configmaps",
+                }, "myconfigmap", "mynamespace",
         )
 	
 	// OR create file based locker backed by /var/locks/mylocks_service_dir directory
@@ -46,7 +135,7 @@ func main() {
 		os.Exit(1)
 	}
 
-        // Case 1: simple blocking lock
+	// Case 1: simple blocking lock
 
 	acquired, lock, err := locker.Acquire("myresource", lockgate.AcquireOptions{Shared: false, Timeout: 30*time.Second}
 	if err != nil {
@@ -80,13 +169,13 @@ func main() {
 
 	if acquired {
 		// ...
+
+		if err := locker.Release(lock); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: failed to unlock myresource: %s\n", err)
+			os.Exit(1)
+		}
 	} else {
 		// ...
-	}
-
-	if err := locker.Release(lock); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: failed to unlock myresource: %s\n", err)
-		os.Exit(1)
 	}
 }
 ```

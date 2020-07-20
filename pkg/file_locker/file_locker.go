@@ -1,12 +1,13 @@
-package lockgate
+package file_locker
 
 import (
 	"fmt"
 	"os"
 	"sync"
 
-	"github.com/google/uuid"
+	"github.com/werf/lockgate"
 
+	"github.com/google/uuid"
 	"github.com/werf/lockgate/pkg/file_lock"
 )
 
@@ -28,37 +29,37 @@ func NewFileLocker(locksDir string) (*FileLocker, error) {
 	}, nil
 }
 
-func (locker *FileLocker) newLock(lockHandle LockHandle) file_lock.LockObject {
-	locker.mux.Lock()
-	defer locker.mux.Unlock()
+func (l *FileLocker) newLock(lockHandle lockgate.LockHandle) file_lock.LockObject {
+	l.mux.Lock()
+	defer l.mux.Unlock()
 
-	if l, hasKey := locker.locks[lockHandle.UUID]; hasKey {
+	if l, hasKey := l.locks[lockHandle.UUID]; hasKey {
 		return l
 	}
 
-	locker.locks[lockHandle.UUID] = file_lock.NewFileLock(lockHandle.LockName, locker.LocksDir)
-	return locker.locks[lockHandle.UUID]
+	l.locks[lockHandle.UUID] = file_lock.NewFileLock(lockHandle.LockName, l.LocksDir)
+	return l.locks[lockHandle.UUID]
 }
 
-func (locker *FileLocker) getAndRemoveLock(lockHandle LockHandle) file_lock.LockObject {
-	locker.mux.Lock()
-	defer locker.mux.Unlock()
+func (l *FileLocker) getAndRemoveLock(lockHandle lockgate.LockHandle) file_lock.LockObject {
+	l.mux.Lock()
+	defer l.mux.Unlock()
 
-	if lock, hasKey := locker.locks[lockHandle.UUID]; hasKey {
-		delete(locker.locks, lockHandle.UUID)
+	if lock, hasKey := l.locks[lockHandle.UUID]; hasKey {
+		delete(l.locks, lockHandle.UUID)
 		return lock
 	}
 
 	return nil
 }
 
-func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, LockHandle, error) {
-	lockHandle := LockHandle{
+func (l *FileLocker) Acquire(lockName string, opts lockgate.AcquireOptions) (bool, lockgate.LockHandle, error) {
+	lockHandle := lockgate.LockHandle{
 		UUID:     uuid.New().String(),
 		LockName: lockName,
 	}
 
-	lock := locker.newLock(lockHandle)
+	lock := l.newLock(lockHandle)
 
 	var wrappedOnWaitFunc func(doWait func() error) error
 	if opts.OnWaitFunc != nil {
@@ -75,8 +76,8 @@ func (locker *FileLocker) Acquire(lockName string, opts AcquireOptions) (bool, L
 	}
 }
 
-func (locker *FileLocker) Release(lockHandle LockHandle) error {
-	if lock := locker.getAndRemoveLock(lockHandle); lock == nil {
+func (l *FileLocker) Release(lockHandle lockgate.LockHandle) error {
+	if lock := l.getAndRemoveLock(lockHandle); lock == nil {
 		return fmt.Errorf("unknown id %q for lock %q", lockHandle.UUID, lockHandle.LockName)
 	} else {
 		return lock.Unlock()
