@@ -1,23 +1,34 @@
 # Lockgate
 
-Lockgate is a locking library for go.
+Lockgate is a locking library for Go.
 
  - Classical interface:
    - 2 types of locks: shared and exclusive;
    - 2 modes of locking: blocking and non-blocking.
- - File locks on the single host are supported.
- - Kubernetes-based distributed locks are supported:
-   - kubernetes locker is configured by an arbitrary kubernetes resource;
+ - **File locks** on the single host are supported.
+ - **Kubernetes-based distributed locks** are supported:
+   - Kubernetes locker is configured by an arbitrary Kubernetes resource;
    - locks are stored in the annotations of the specified resource;
-   - properly use native kubernetes optimistic locking to handle simultaneous access to the resource.
- - Locks using http lockgate locks server are supported:
-   - lockgate locks server may be run as a standalone process or multiple kubernetes-backed processes:
-      - lockgate locks server uses in-memory or kubernetes key-value storage with optimistic-locks;
-   - user specifies URL of lock server instance in the userspace code to use locks over http;
+   - properly use native Kubernetes optimistic locking to handle simultaneous access to the resource.
+ - **Locks using HTTP server** are supported:
+   - lockgate lock server may be run as a standalone process or multiple Kubernetes-backed processes:
+      - lockgate locks server uses in-memory or Kubernetes key-value storage with optimistic locks;
+   - user specifies URL of a lock server instance in the userspace code to use locks over HTTP.
 
 This library is used in the [werf CI/CD tool](https://github.com/werf/werf) to implement synchronization of multiple werf build and deploy processes running from single or multiple hosts using Kubernetes or local file locks.
 
-If you have an Open Source project using lockgate, feel free to list it here.
+If you have an Open Source project using lockgate, feel free to list it here via PR.
+
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Select a locker](#select-a-locker)
+    - [File locker](#file-locker)
+    - [Kubernetes locker](#kubernetes-locker)
+    - [HTTP locker](#http-locker)
+  - [Lockgate HTTP lock server](#lockgate-http-lock-server)
+  - [Locker usage example](#locker-usage-example)
+- [Feedback](#feedback)
+
 
 # Installation
 
@@ -27,14 +38,17 @@ go get -u github.com/werf/lockgate
 
 # Usage
 
-
 ## Select a locker
 
-The main interface of the library which user interacts with is `lockgate.Locker`. There are multiple implementations of locker available: file locker, kubernetes locker and http locker.
+The main interface of the library which user interacts with is `lockgate.Locker`. There are multiple implementations of the locker available: 
+
+* [file locker](#file-locker),
+* [Kubernetes locker](#kubernetes-locker),
+* [HTTP locker](#http-locker).
 
 ### File locker
 
-This is a simple OS filesystem locks based locker, which can be used by multiple processes on the single host filesystem.
+This is a simple OS filesystem locks based locker. It can be used by multiple processes on the single host filesystem.
 
 Create a file locker as follows:
 
@@ -50,11 +64,11 @@ All cooperating processes should use the same locks directory.
 
 ### Kubernetes locker
 
-This locker uses specified kubernetes resource as a storage for locker data. Multiple processes which use this locker should have an access to the same kubernetes cluster.
+This locker uses specified Kubernetes resource as a storage for locker data. Multiple processes which use this locker should have an access to the same Kubernetes cluster.
 
 This locker allows distributed locking over multiple hosts.
 
-Create kubernetes locker as follows:
+Create a Kubernetes locker as follows:
 
 ```
 import "github.com/werf/lockgate"
@@ -71,13 +85,13 @@ locker, err := lockgate.NewKubernetesLocker(
 )
 ```
 
-All cooperating processes should use the same kubernetes-params. In this example locks data will be stored in the Namesapce "myns" ConfigMap "mycm".
+All cooperating processes should use the same Kubernetes params. In this example, locks data will be stored in the `mycm` ConfigMap in the `myns` namespace.
 
-### Http locker
+### HTTP locker
 
-This locker uses lockgate http server to organize locks and allows distributed locking over multiple hosts.
+This locker uses lockgate HTTP server to organize locks and allows distributed locking over multiple hosts.
 
-Create http locker as follows:
+Create a HTTP locker as follows:
 
 ```
 import "github.com/werf/lockgate"
@@ -87,13 +101,16 @@ import "github.com/werf/lockgate"
 locker := lockgate.NewHttpLocker("http://localhost:55589")
 ```
 
-All cooperating processes should use the same URL endpoint of lockgate http lock server. In this example there should be lockgate http locker server avaiable at `localhost:55589` address. See below how to bring up such server.
+All cooperating processes should use the same URL endpoint of the lockgate HTTP lock server. In this example, there should be a lockgate HTTP lock server available at `localhost:55589` address. See below how to run such a server.
 
-## Lockgate http locker server
+## Lockgate HTTP lock server
 
-Lockgate http server can use memory-storage or kubernetes-storage. There can be only 1 instance of lockgate server, that uses memory storage and there can be arbitrary number of servers that use kubernetes-storage.
+Lockgate HTTP server can use memory-storage or kubernetes-storage:
 
-Run lockgate http locker server as follows:
+- There can be only 1 instance of the lockgate server that uses memory storage.
+- There can be an arbitrary number of servers using kubernetes-storage.
+
+Run a lockgate HTTP lock server as follows:
 
 ```
 import "github.com/werf/lockgate"
@@ -114,9 +131,9 @@ backend := distributed_locker.NewOptimisticLockingStorageBasedBackend(store)
 distributed_locker.RunHttpBackendServer("0.0.0.0", "55589", backend)
 ```
 
-## Locker usage
+## Locker usage example
 
-In the following example a `locker` object instance is created using one of the ways documented above — user should select needed locker implementation. The rest of the sample uses generic lockgate.Locker interface to acquire and release locks.
+In the following example, a `locker` object instance is created using one of the ways documented above — user should select the required locker implementation. The rest of the sample uses generic `lockgate.Locker` interface to acquire and release locks.
 
 ```
 import "github.com/werf/lockgate"
@@ -183,3 +200,7 @@ func main() {
 	}
 }
 ```
+
+# Feedback
+
+Your feedback is welcome! Feel free to create your issue, PR or contact us in [werf Slack channel](https://cloud-native.slack.com/messages/CHY2THYUU) if you have any questions.
