@@ -1,6 +1,7 @@
 package optimistic_locking_store
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -78,9 +79,9 @@ func (store *KubernetesResourceAnnotationsStore) getResource() (*unstructured.Un
 	var obj *unstructured.Unstructured
 
 	if store.Namespace == "" {
-		obj, err = store.KubernetesInterface.Resource(store.GVR).Get(store.ResourceName, metav1.GetOptions{})
+		obj, err = store.KubernetesInterface.Resource(store.GVR).Get(context.Background(), store.ResourceName, metav1.GetOptions{})
 	} else {
-		obj, err = store.KubernetesInterface.Resource(store.GVR).Namespace(store.Namespace).Get(store.ResourceName, metav1.GetOptions{})
+		obj, err = store.KubernetesInterface.Resource(store.GVR).Namespace(store.Namespace).Get(context.Background(), store.ResourceName, metav1.GetOptions{})
 	}
 
 	if err != nil {
@@ -94,9 +95,9 @@ func (store *KubernetesResourceAnnotationsStore) updateResource(obj *unstructure
 	var newObj *unstructured.Unstructured
 
 	if store.Namespace == "" {
-		newObj, err = store.KubernetesInterface.Resource(store.GVR).Update(obj, metav1.UpdateOptions{})
+		newObj, err = store.KubernetesInterface.Resource(store.GVR).Update(context.Background(), obj, metav1.UpdateOptions{})
 	} else {
-		newObj, err = store.KubernetesInterface.Resource(store.GVR).Namespace(store.Namespace).Update(obj, metav1.UpdateOptions{})
+		newObj, err = store.KubernetesInterface.Resource(store.GVR).Namespace(store.Namespace).Update(context.Background(), obj, metav1.UpdateOptions{})
 	}
 
 	if errors.IsAlreadyExists(err) || err == nil {

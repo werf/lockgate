@@ -11,8 +11,9 @@ require (
 	github.com/json-iterator/go v1.1.8 // indirect
 	github.com/spaolacci/murmur3 v1.1.0
 	github.com/stretchr/testify v1.4.0 // indirect
-	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586
-	k8s.io/apimachinery v0.16.8-beta.0
-	k8s.io/client-go v0.16.7
+	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
+	k8s.io/apimachinery v0.18.6
+	k8s.io/client-go v0.18.6
+	sigs.k8s.io/structured-merge-diff v0.0.0-20190525122527-15d366b2352e // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
