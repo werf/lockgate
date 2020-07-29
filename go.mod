@@ -1,6 +1,6 @@
 module github.com/werf/lockgate
 
-go 1.13
+go 1.14
 
 require (
 	github.com/gofrs/flock v0.7.1
