@@ -87,7 +87,7 @@ import "github.com/werf/lockgate"
 locker := lockgate.NewHttpLocker("http://localhost:55589")
 ```
 
-All cooperating processes should use the same kubernetes-params. In this example there should be lockgate http locker server avaiable at `localhost:55589` address. See below how to bring up such server.
+All cooperating processes should use the same URL endpoint of lockgate http lock server. In this example there should be lockgate http locker server avaiable at `localhost:55589` address. See below how to bring up such server.
 
 ## Lockgate http locker server
 
