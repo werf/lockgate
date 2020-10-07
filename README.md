@@ -201,6 +201,8 @@ func main() {
 }
 ```
 
-# Feedback
+# Community
 
-Your feedback is welcome! Feel free to create your issue, PR or contact us in [werf Slack channel](https://cloud-native.slack.com/messages/CHY2THYUU) if you have any questions.
+Please feel free to reach us via [Flant Open Source forums](https://community.flant.com/) (based on Discourse). They have a [special category](https://community.flant.com/c/werf/6) dedicated to werf & its subprojects.
+
+You're also welcome to follow [@werf_io](https://twitter.com/werf_io) to stay informed about all important news, articles, etc.
