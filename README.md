@@ -203,6 +203,6 @@ func main() {
 
 # Community
 
-Please feel free to reach us via [Flant Open Source forums](https://community.flant.com/) (based on Discourse). They have a [special category](https://community.flant.com/c/werf/6) dedicated to werf & its subprojects.
+Please feel free to reach us via [project's Discussions](https://github.com/werf/lockgate/discussions) and [werf's Telegram group](https://t.me/werf_io) (there's [another one in Russian](https://t.me/werf_ru) as well).
 
 You're also welcome to follow [@werf_io](https://twitter.com/werf_io) to stay informed about all important news, articles, etc.
