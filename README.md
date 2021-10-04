@@ -71,12 +71,15 @@ This locker allows distributed locking over multiple hosts.
 Create a Kubernetes locker as follows:
 
 ```
-import "github.com/werf/lockgate"
+import (
+	"github.com/werf/lockgate"
+	"github.com/werf/lockgate/pkg/distributed_locker"
+)
 
 ...
 
 // Initialize kubeDynamicClient from https://github.com/kubernetes/client-go.
-locker, err := lockgate.NewKubernetesLocker(
+locker, err := distributed_locker.NewKubernetesLocker(
 	kubeDynamicClient, schema.GroupVersionResource{
 		Group:    "",
 		Version:  "v1",
@@ -94,11 +97,14 @@ This locker uses lockgate HTTP server to organize locks and allows distributed l
 Create a HTTP locker as follows:
 
 ```
-import "github.com/werf/lockgate"
+import (
+	"github.com/werf/lockgate"
+	"github.com/werf/lockgate/pkg/distributed_locker"
+)
 
 ...
 
-locker := lockgate.NewHttpLocker("http://localhost:55589")
+locker := distributed_locker.NewHttpLocker("http://localhost:55589")
 ```
 
 All cooperating processes should use the same URL endpoint of the lockgate HTTP lock server. In this example, there should be a lockgate HTTP lock server available at `localhost:55589` address. See below how to run such a server.
@@ -113,9 +119,11 @@ Lockgate HTTP server can use memory-storage or kubernetes-storage:
 Run a lockgate HTTP lock server as follows:
 
 ```
-import "github.com/werf/lockgate"
-import "github.com/werf/lockgate/pkg/distributed_locker"
-import "github.com/werf/lockgate/pkg/distributed_locker/optimistic_locking_store"
+import (
+	"github.com/werf/lockgate"
+	"github.com/werf/lockgate/pkg/distributed_locker"
+	"github.com/werf/lockgate/pkg/distributed_locker/optimistic_locking_store"
+)
 
 ...
 store := optimistic_locking_store.NewInMemoryStore()
@@ -136,7 +144,10 @@ distributed_locker.RunHttpBackendServer("0.0.0.0", "55589", backend)
 In the following example, a `locker` object instance is created using one of the ways documented above — user should select the required locker implementation. The rest of the sample uses generic `lockgate.Locker` interface to acquire and release locks.
 
 ```
-import "github.com/werf/lockgate"
+import (
+	"github.com/werf/lockgate"
+	"github.com/werf/lockgate/pkg/distributed_locker"
+)
 
 func main() {
 	// Create Kubernetes based locker in ns/mynamespace cm/myconfigmap.
