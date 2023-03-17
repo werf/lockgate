@@ -2,9 +2,7 @@ package optimistic_locking_store
 
 import "errors"
 
-var (
-	ErrRecordVersionChanged = errors.New("record version changed")
-)
+var ErrRecordVersionChanged = errors.New("record version changed")
 
 type OptimisticLockingStore interface {
 	GetValue(key string) (*Value, error)

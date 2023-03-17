@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/werf/lockgate"
-
 	"github.com/werf/lockgate/pkg/util"
 )
 

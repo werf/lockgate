@@ -5,9 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/werf/lockgate"
-
 	"github.com/werf/kubedog/pkg/kube"
+	"github.com/werf/lockgate"
 )
 
 func do() error {

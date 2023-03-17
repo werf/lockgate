@@ -4,9 +4,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/werf/lockgate"
-
 	"github.com/google/uuid"
+
+	"github.com/werf/lockgate"
 )
 
 const (

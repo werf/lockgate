@@ -5,11 +5,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/werf/lockgate"
-
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/werf/kubedog/pkg/kube"
+	"github.com/werf/lockgate"
 )
 
 func do() error {

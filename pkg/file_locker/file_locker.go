@@ -5,9 +5,9 @@ import (
 	"os"
 	"sync"
 
-	"github.com/werf/lockgate"
-
 	"github.com/google/uuid"
+
+	"github.com/werf/lockgate"
 	"github.com/werf/lockgate/pkg/file_lock"
 )
 
@@ -19,7 +19,7 @@ type FileLocker struct {
 }
 
 func NewFileLocker(locksDir string) (*FileLocker, error) {
-	if err := os.MkdirAll(locksDir, 0755); err != nil {
+	if err := os.MkdirAll(locksDir, 0o755); err != nil {
 		return nil, fmt.Errorf("cannot create dir %s: %s", locksDir, err)
 	}
 

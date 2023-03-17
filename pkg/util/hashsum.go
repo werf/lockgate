@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/crypto/sha3"
-
 	"github.com/spaolacci/murmur3"
+	"golang.org/x/crypto/sha3"
 )
 
 // TODO: remove murmurhash, use sha256 for file locks

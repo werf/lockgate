@@ -136,7 +136,7 @@ func (l *DistributedLocker) leaseRenewWorker(handle lockgate.LockHandle, opts lo
 			}
 
 			if !l.isLeaseRenewWorkerActive(handle) {
-				debug("(leaseRenewWorker %q %q) already stopped, ignore check")
+				debug("(leaseRenewWorker %q %q) already stopped, ignore check", handle.LockName, handle.UUID)
 				continue
 			}
 
