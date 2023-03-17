@@ -7,10 +7,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/werf/kubedog/pkg/kube"
-
-	"github.com/werf/lockgate/pkg/distributed_locker/optimistic_locking_store"
-
 	"github.com/werf/lockgate/pkg/distributed_locker"
+	"github.com/werf/lockgate/pkg/distributed_locker/optimistic_locking_store"
 )
 
 func run() error {

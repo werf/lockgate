@@ -7,11 +7,9 @@ import (
 	"github.com/werf/lockgate/pkg/util"
 )
 
-var (
-	LegacyHashFunction = false
-)
+var LegacyHashFunction = false
 
-func NewFileLock(name string, locksDir string) LockObject {
+func NewFileLock(name, locksDir string) LockObject {
 	return &FileLock{BaseLock: BaseLock{Name: name}, LocksDir: locksDir}
 }
 

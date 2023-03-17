@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -20,7 +19,7 @@ type KubernetesResourceAnnotationsStore struct {
 	Namespace           string
 }
 
-func NewKubernetesResourceAnnotationsStore(kubernetesInterface dynamic.Interface, gvr schema.GroupVersionResource, resourceName string, namespace string) *KubernetesResourceAnnotationsStore {
+func NewKubernetesResourceAnnotationsStore(kubernetesInterface dynamic.Interface, gvr schema.GroupVersionResource, resourceName, namespace string) *KubernetesResourceAnnotationsStore {
 	return &KubernetesResourceAnnotationsStore{
 		KubernetesInterface: kubernetesInterface,
 		GVR:                 gvr,

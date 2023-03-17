@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/werf/lockgate"
-
 	"github.com/werf/lockgate/pkg/util"
 )
 
@@ -22,7 +21,7 @@ func NewHttpBackend(urlEndpoint string) *HttpBackend {
 }
 
 func (backend *HttpBackend) Acquire(lockName string, opts AcquireOptions) (lockgate.LockHandle, error) {
-	var request = AcquireRequest{
+	request := AcquireRequest{
 		LockName: lockName,
 		Opts:     opts,
 	}
@@ -35,7 +34,7 @@ func (backend *HttpBackend) Acquire(lockName string, opts AcquireOptions) (lockg
 }
 
 func (backend *HttpBackend) RenewLease(handle lockgate.LockHandle) error {
-	var request = RenewLeaseRequest{LockHandle: handle}
+	request := RenewLeaseRequest{LockHandle: handle}
 	var response RenewLeaseResponse
 
 	if err := util.PerformHttpPost(backend.HttpClient, fmt.Sprintf("%s/%s", backend.URLEndpoint, "renew-lease"), request, &response); err != nil {
@@ -45,7 +44,7 @@ func (backend *HttpBackend) RenewLease(handle lockgate.LockHandle) error {
 }
 
 func (backend *HttpBackend) Release(handle lockgate.LockHandle) error {
-	var request = ReleaseRequest{LockHandle: handle}
+	request := ReleaseRequest{LockHandle: handle}
 	var response ReleaseResponse
 
 	if err := util.PerformHttpPost(backend.HttpClient, fmt.Sprintf("%s/%s", backend.URLEndpoint, "release"), request, &response); err != nil {

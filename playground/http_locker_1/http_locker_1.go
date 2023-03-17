@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/werf/lockgate"
-
 	"github.com/werf/lockgate/pkg/distributed_locker"
 )
 
