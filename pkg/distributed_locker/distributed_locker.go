@@ -33,6 +33,35 @@ func (l *DistributedLocker) Acquire(lockName string, opts lockgate.AcquireOption
 	return l.acquire(lockName, opts, true, time.Now())
 }
 
+func (l *DistributedLocker) HoldLease(lockName string, uuid string) {
+	debug("(hold %q) uuid=%s", lockName, uuid)
+	lockHandle := lockgate.LockHandle{UUID: uuid, LockName: lockName}
+	done := make(chan struct{})
+	opts := lockgate.AcquireOptions{
+		OnLostLeaseFunc: func(lockHandle lockgate.LockHandle) error {
+			debug("(lost lease %q) uuid=%s", lockHandle.LockName, lockHandle.UUID)
+			close(done)
+			return nil
+		},
+	}
+	l.runLeaseRenewWorker(lockHandle, opts)
+
+	ticker := time.NewTicker(DistributedLockLeaseRenewPeriodSeconds * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			debug("done holding lease")
+			return
+		case <-ticker.C:
+			if !l.isLeaseRenewWorkerActive(lockHandle) {
+				return
+			}
+		}
+	}
+}
+
 func (l *DistributedLocker) acquire(lockName string, opts lockgate.AcquireOptions, shouldCallOnWait bool, startedAcquireAt time.Time) (bool, lockgate.LockHandle, error) {
 RETRY_ACQUIRE:
 	if opts.Timeout != 0 {
