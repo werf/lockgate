@@ -23,6 +23,7 @@ type AcquireOptions struct {
 	NonBlocking bool
 	Timeout     time.Duration
 	Shared      bool
+	AcquirerId  string
 
 	OnWaitFunc      func(lockName string, doWait func() error) error
 	OnLostLeaseFunc func(lock LockHandle) error

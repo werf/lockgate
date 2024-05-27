@@ -50,7 +50,8 @@ type DistributedLockerBackend interface {
 }
 
 type AcquireOptions struct {
-	Shared bool `json:"shared"`
+	Shared     bool   `json:"shared"`
+	AcquirerId string `json:"acquirerId"`
 }
 
 type LockLeaseRecord struct {
@@ -58,6 +59,13 @@ type LockLeaseRecord struct {
 	ExpireAtTimestamp  int64
 	SharedHoldersCount int64
 	IsShared           bool
+	QueueMembers       map[string]*QueueMember
+}
+
+type QueueMember struct {
+	AcquirerId          string
+	AcquiredAtTimestamp int64
+	ExpireAtTimestamp   int64
 }
 
 func NewLockLeaseRecord(lockName string, isShared bool) *LockLeaseRecord {
@@ -66,5 +74,6 @@ func NewLockLeaseRecord(lockName string, isShared bool) *LockLeaseRecord {
 		ExpireAtTimestamp:  time.Now().Unix() + DistributedLockLeaseTTLSeconds,
 		SharedHoldersCount: 1,
 		IsShared:           isShared,
+		QueueMembers:       make(map[string]*QueueMember),
 	}
 }
