@@ -14,6 +14,7 @@ Lockgate is a locking library for Go.
    - lockgate lock server may be run as a standalone process or multiple Kubernetes-backed processes:
       - lockgate locks server uses in-memory or Kubernetes key-value storage with optimistic locks;
    - user specifies URL of a lock server instance in the userspace code to use locks over HTTP.
+   - clients waiting on a lock can be placed in a queue so they receive the lock in a FIFO manner
 
 This library is used in the [werf CI/CD tool](https://github.com/werf/werf) to implement synchronization of multiple werf build and deploy processes running from single or multiple hosts using Kubernetes or local file locks.
 
@@ -108,6 +109,47 @@ locker := distributed_locker.NewHttpLocker("http://localhost:55589")
 ```
 
 All cooperating processes should use the same URL endpoint of the lockgate HTTP lock server. In this example, there should be a lockgate HTTP lock server available at `localhost:55589` address. See below how to run such a server.
+
+To ensure fairness for long-held locks, clients can pass a unique "Acquirer Id"
+along with their request to acquire the lock.  Only the client waiting the
+longest (and who has continued to renew their request for the lock) will be
+given the lock when it is released or expires.
+
+An example use case is an external lock needed to serialize multi-step
+deployments illustrated by the
+[deploylock](https://github.com/octoberswimmer/deploylock) application used
+with Salesforce orgs.
+
+```
+backend := distributed_locker.NewHttpBackend(serverUrl)
+l := distributed_locker.NewDistributedLocker(backend)
+
+acquired, lockHandle, err := l.Acquire(lockName, lockgate.AcquireOptions{
+   AcquirerId: uuid.New().String(),
+   OnWaitFunc: func(lockName string, doWait func() error) error {
+      done := make(chan struct{})
+      ticker := time.NewTicker(3 * time.Second)
+      defer ticker.Stop()
+      go func() {
+         for {
+            fmt.Fprintf(os.Stderr, "WAITING FOR %s\n", lockName)
+            select {
+            case <-done:
+            case <-ticker.C:
+            }
+         }
+      }()
+      defer close(done)
+      if err := doWait(); err != nil {
+         fmt.Fprintf(os.Stderr, "WAITING FOR %s FAILED: %s\n", lockName, err)
+         return err
+      } else {
+         fmt.Fprintf(os.Stderr, "WAITING FOR %s DONE\n", lockName)
+      }
+      return nil
+   },
+})
+```
 
 ## Lockgate HTTP lock server
 
