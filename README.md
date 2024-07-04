@@ -151,6 +151,15 @@ acquired, lockHandle, err := l.Acquire(lockName, lockgate.AcquireOptions{
 })
 ```
 
+`HoldLease` can be used renew a lease previously acquired.  This is useful when
+you want to block while waiting for a lease, then renew the lease in the background.
+
+```
+backend := distributed_locker.NewHttpBackend(serverUrl)
+l := distributed_locker.NewDistributedLocker(backend)
+l.HoldLease(lockName, uuid)
+```
+
 ## Lockgate HTTP lock server
 
 Lockgate HTTP server can use memory-storage or kubernetes-storage:
