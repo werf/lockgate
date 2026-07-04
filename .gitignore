@@ -15,3 +15,7 @@ main
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# IDE / OS
+.idea/
+.DS_Store
