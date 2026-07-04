@@ -7,6 +7,11 @@ import (
 	"github.com/gofrs/flock"
 )
 
+// maxAcquireAttempts bounds retries when the lock file keeps getting unlinked
+// concurrently (by GCLockFileDir) right after we open it. In practice one retry
+// is enough because a freshly created lock file is younger than GC's minAge.
+const maxAcquireAttempts = 10
+
 type fileLocker struct {
 	baseLocker
 
@@ -18,10 +23,41 @@ func (locker *fileLocker) tryLock() (bool, error) {
 	if locker.lockHandler == nil {
 		panic("lockHandler is not set")
 	}
-	if locker.ReadOnly {
-		return locker.lockHandler.TryRLock()
+
+	for attempt := 0; attempt < maxAcquireAttempts; attempt++ {
+		var locked bool
+		var err error
+		if locker.ReadOnly {
+			locked, err = locker.lockHandler.TryRLock()
+		} else {
+			locked, err = locker.lockHandler.TryLock()
+		}
+		if err != nil {
+			return false, err
+		}
+		if !locked {
+			return false, nil
+		}
+
+		// Inode-safe check: GC may have unlinked the lock file between our open
+		// and flock, leaving us holding a dead inode while a new file with the
+		// same name gets created and locked by someone else. Detect that and
+		// retry on a freshly opened file so two processes never hold the "same"
+		// logical lock at once.
+		alive, err := lockFileIsAlive(locker.lockHandler)
+		if err != nil {
+			_ = locker.lockHandler.Unlock()
+			return false, err
+		}
+		if alive {
+			return true, nil
+		}
+
+		_ = locker.lockHandler.Unlock()
+		locker.lockHandler = flock.New(locker.FileLock.LockFilePath())
 	}
-	return locker.lockHandler.TryLock()
+
+	return false, fmt.Errorf("unable to acquire lock for %s: lock file kept being removed concurrently", locker.FileLock.LockFilePath())
 }
 
 func (locker *fileLocker) TryLock() (bool, error) {
