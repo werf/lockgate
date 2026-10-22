@@ -93,45 +93,63 @@ func (locker *fileLocker) Lock() error {
 }
 
 func (locker *fileLocker) pollLock() error {
-	flockRes := make(chan error)
-	cancelPoll := make(chan bool)
+	// Both channels are buffered: the poll goroutine may be acquiring the flock
+	// in the very same instant the timeout fires, and neither side must ever
+	// block on its send waiting for a peer that has already given up receiving.
+	flockRes := make(chan error, 1)
+	cancelPoll := make(chan bool, 1)
+	pollDone := make(chan struct{})
 
 	go func() {
-		ticker := time.NewTicker(time.Millisecond * 500)
+		defer close(pollDone)
 
-	PollFlock:
+		ticker := time.NewTicker(time.Millisecond * 500)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
 				locked, err := locker.tryLock()
 				if err != nil {
 					flockRes <- fmt.Errorf("error trying to lock file %q while polling for lock: %s", locker.FileLock.LockFilePath(), err)
-					break PollFlock
+					return
 				}
 				if locked {
 					flockRes <- nil
-					break PollFlock
+					return
 				}
 			case <-cancelPoll:
-				break PollFlock
+				return
 			}
 		}
 	}()
 
-	if locker.Timeout != 0 {
-		select {
-		case err := <-flockRes:
-			return err
-		case <-time.After(locker.Timeout):
-			cancelPoll <- true
-			return fmt.Errorf("%q file lock timeout %s expired", locker.FileLock.LockFilePath(), locker.Timeout)
-		}
-	} else {
-		select {
-		case err := <-flockRes:
-			return err
-		}
+	if locker.Timeout == 0 {
+		return <-flockRes
 	}
+
+	select {
+	case err := <-flockRes:
+		return err
+	case <-time.After(locker.Timeout):
+	}
+
+	cancelPoll <- true
+	<-pollDone
+
+	// The poll goroutine could have acquired the flock right before giving up on
+	// it: release it, otherwise it stays held for the lifetime of the process.
+	select {
+	case err := <-flockRes:
+		if err == nil {
+			if err := locker.lockHandler.Unlock(); err != nil {
+				return fmt.Errorf("error unlocking %q acquired right at the lock timeout expiration: %s", locker.FileLock.LockFilePath(), err)
+			}
+		}
+	default:
+	}
+
+	return fmt.Errorf("%q file lock timeout %s expired", locker.FileLock.LockFilePath(), locker.Timeout)
 }
 
 func (locker *fileLocker) Unlock() error {
